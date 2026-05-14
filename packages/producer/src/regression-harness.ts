@@ -718,18 +718,19 @@ async function runTestSuite(
         return result;
       }
       // `checkDistributedSupport` already narrowed fps to {24,30,60} and
-      // rejected webm; the `as` casts surface those guarantees to TS.
+      // rejected webm; the cast surfaces that guarantee to TS.
       const fpsNum = suite.meta.renderConfig.fps.num as 24 | 30 | 60;
-      const distributedFormat = (suite.meta.renderConfig.format ?? "mp4") as
-        | "mp4"
-        | "mov"
-        | "png-sequence";
+      // `validateMetadata` only accepts `format: "mp4" | "webm"` in
+      // `renderConfig`, and `checkDistributedSupport` rejected webm above,
+      // so by here only `mp4` (or the unset default) can reach this call.
+      // If the metadata schema grows to accept "mov" / "png-sequence"
+      // someday, narrow this cast accordingly.
       await runDistributedSimulatedRender({
         projectDir: tempSrcDir,
         tempRoot,
         renderedOutputPath,
         fps: fpsNum,
-        format: distributedFormat,
+        format: "mp4",
         chunkSize: suite.meta.renderConfig.chunkSize,
         maxParallelChunks: suite.meta.renderConfig.maxParallelChunks,
         variables: suite.meta.renderConfig.variables,

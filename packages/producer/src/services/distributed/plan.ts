@@ -34,7 +34,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { type CanvasResolution } from "@hyperframes/core";
 import { type EngineConfig, resolveConfig } from "@hyperframes/engine";
 import { defaultLogger, type ProducerLogger } from "../../logger.js";
@@ -147,13 +147,24 @@ export interface PlanResult {
 }
 
 /**
- * Skip patterns for the `projectDir → planDir/compiled/` pre-seed copy.
- * Real projects often contain `node_modules/`, VCS metadata, and harness
- * artifacts that have no business in a planDir — they bloat the 2 GB
- * planDir cap and slow the S3/Lambda round-trip for no benefit.
+ * Top-level directory names skipped by the `projectDir → planDir/compiled/`
+ * pre-seed copy. Real projects often contain `node_modules/`, VCS metadata,
+ * and harness artifacts that have no business in a planDir — they bloat
+ * the 2 GB planDir cap and slow the S3/Lambda round-trip for no benefit.
+ * Matched against the path relative to `projectDir` so a `projectDir`
+ * whose absolute path happens to contain one of these names (e.g.
+ * `~/work/output/comp/`) doesn't false-positive-skip the entire copy.
  */
-const PLAN_PROJECT_DIR_COPY_SKIP =
-  /(^|\/)(node_modules|\.git|\.cache|output|failures|dist|\.next|\.turbo)(\/|$)/;
+const PLAN_PROJECT_DIR_SKIP_SEGMENTS = new Set([
+  "node_modules",
+  ".git",
+  ".cache",
+  "output",
+  "failures",
+  "dist",
+  ".next",
+  ".turbo",
+]);
 
 /** Default chunk size in frames (~8s @ 30fps; fits Lambda's 15-min cap). */
 export const DEFAULT_CHUNK_SIZE = 240;
@@ -527,7 +538,15 @@ export async function plan(
   cpSync(projectDir, compiledDir, {
     recursive: true,
     dereference: true,
-    filter: (src) => !PLAN_PROJECT_DIR_COPY_SKIP.test(src),
+    filter: (src) => {
+      // cpSync passes the absolute source path. Compare relative-to-projectDir
+      // so a parent directory of projectDir matching a skip name doesn't
+      // false-positive every descendant.
+      const rel = relative(projectDir, src);
+      if (rel === "" || rel.startsWith("..")) return true;
+      const firstSegment = rel.split(sep, 1)[0];
+      return firstSegment === undefined || !PLAN_PROJECT_DIR_SKIP_SEGMENTS.has(firstSegment);
+    },
   });
 
   // The compiled directory lives at `<planDir>/compiled/` in the final

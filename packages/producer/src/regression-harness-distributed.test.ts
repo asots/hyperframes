@@ -113,11 +113,32 @@ describe("resolveMinPsnrForMode()", () => {
     );
   });
 
-  it("DISTRIBUTED_SIMULATED_MIN_PSNR_DB is the absolute-pathology floor", () => {
-    // 10 dB is far below any real fixture's authored minPsnr (the lowest
-    // among committed fixtures is 30 dB). It exists as a non-zero guard
-    // for distributed-mode regressions that render fully-black frames
-    // against a fixture authored with `minPsnr: 0`.
-    expect(DISTRIBUTED_SIMULATED_MIN_PSNR_DB).toBe(10);
+  it("every committed fixture authors a minPsnr above the absolute floor", async () => {
+    // The pathology floor only fires for a fixture whose authored minPsnr
+    // is below it — by design that should be no committed fixture. If
+    // someone lands a permissive fixture (minPsnr: 5), distributed mode
+    // will silently use 10 dB instead, which is the right behavior but
+    // worth flagging so reviewers ask "is this fixture really meant to
+    // accept near-black output?". This test prevents accidental misuse
+    // by failing loudly when a fixture drops below the floor.
+    const { readdirSync, readFileSync, statSync } = await import("node:fs");
+    const { join: pathJoin } = await import("node:path");
+    const testsDir = pathJoin(import.meta.dir, "..", "tests");
+    const offenders: Array<{ fixture: string; minPsnr: number }> = [];
+    for (const entry of readdirSync(testsDir)) {
+      const metaPath = pathJoin(testsDir, entry, "meta.json");
+      let stat;
+      try {
+        stat = statSync(metaPath);
+      } catch {
+        continue;
+      }
+      if (!stat.isFile()) continue;
+      const meta = JSON.parse(readFileSync(metaPath, "utf-8")) as { minPsnr?: unknown };
+      if (typeof meta.minPsnr === "number" && meta.minPsnr < DISTRIBUTED_SIMULATED_MIN_PSNR_DB) {
+        offenders.push({ fixture: entry, minPsnr: meta.minPsnr });
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

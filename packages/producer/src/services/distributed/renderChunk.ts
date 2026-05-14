@@ -439,21 +439,21 @@ export async function renderChunk(
       forceScreenshot: encoder.forceScreenshot,
     };
 
-    // Rebuild the BeforeCaptureHook that injects pre-extracted video
-    // frames into the page. Computed once per chunk and reused — the
-    // `createRenderVideoFrameInjector` callback `runCaptureStage` accepts
-    // can fire on every frame, and re-listing `planDir/video-frames/`
-    // each time would be wasteful (the directory contents don't change
-    // for the duration of a chunk render). Compositions with no video
-    // elements produce `null` here, matching the in-process renderer's
-    // skip path.
-    const chunkVideoInjectorFactory = (): BeforeCaptureHook | null => {
-      if (!planVideos || planVideos.extracted.length === 0) return null;
-      const extracted = rebuildExtractedFramesFromPlanDir(planDir, planVideos.extracted);
-      const frameLookup = createFrameLookupTable(planVideos.videos, extracted);
-      return createVideoFrameInjector(frameLookup);
-    };
-    const cachedVideoInjector = chunkVideoInjectorFactory();
+    // Build the BeforeCaptureHook that injects pre-extracted video frames
+    // into the page once per chunk and reuse — `runCaptureStage` may
+    // invoke `createRenderVideoFrameInjector` multiple times, and
+    // re-listing `planDir/video-frames/` each call would be wasteful.
+    // Compositions with no video elements produce `null`, matching the
+    // in-process renderer's skip path.
+    const videoInjector: BeforeCaptureHook | null =
+      planVideos && planVideos.extracted.length > 0
+        ? createVideoFrameInjector(
+            createFrameLookupTable(
+              planVideos.videos,
+              rebuildExtractedFramesFromPlanDir(planDir, planVideos.extracted),
+            ),
+          )
+        : null;
 
     // ── Per-chunk work + frames directories ──
     // Suffix workDir with pid + random bytes so concurrent invocations on
@@ -530,7 +530,7 @@ export async function renderChunk(
         needsAlpha: plan.dimensions.format !== "mp4",
         captureAttempts: [],
         buildCaptureOptions: () => captureOptions,
-        createRenderVideoFrameInjector: () => cachedVideoInjector,
+        createRenderVideoFrameInjector: () => videoInjector,
         abortSignal: undefined,
         assertNotAborted: () => {},
         frameRange: { startFrame: slice.startFrame, endFrame: slice.endFrame },
