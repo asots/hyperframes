@@ -1471,6 +1471,7 @@ export function initSandboxRuntimeModular(): void {
         postState(true);
 
         let lateBindChecks = 0;
+        let sawMissing = false;
         const lateBindInterval = setInterval(() => {
           if (++lateBindChecks > 50) {
             clearInterval(lateBindInterval);
@@ -1482,10 +1483,11 @@ export function initSandboxRuntimeModular(): void {
             const id = hosts[i].getAttribute("data-composition-id");
             if (id && !timelines[id]) {
               allBound = false;
+              sawMissing = true;
               break;
             }
           }
-          if (allBound && lateBindChecks > 1) {
+          if (allBound && !sawMissing) {
             clearInterval(lateBindInterval);
             return;
           }
