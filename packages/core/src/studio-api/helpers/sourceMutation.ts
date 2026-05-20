@@ -54,3 +54,51 @@ export function removeElementFromHtml(source: string, target: SourceMutationTarg
   element.remove();
   return wrappedFragment ? document.body.innerHTML || "" : document.toString();
 }
+
+export interface PatchOperation {
+  type: "inline-style" | "attribute" | "html-attribute" | "text-content";
+  property: string;
+  value: string | null;
+}
+
+export function patchElementInHtml(
+  source: string,
+  target: SourceMutationTarget,
+  operations: PatchOperation[],
+): string {
+  const { document, wrappedFragment } = parseSourceDocument(source);
+  const el = findTargetElement(document, target);
+  if (!el || !(el instanceof (el.ownerDocument.defaultView?.HTMLElement ?? Element))) return source;
+  const htmlEl = el as unknown as HTMLElement;
+
+  for (const op of operations) {
+    switch (op.type) {
+      case "inline-style":
+        if (op.value != null) {
+          htmlEl.style.setProperty(op.property, op.value);
+        } else {
+          htmlEl.style.removeProperty(op.property);
+        }
+        break;
+      case "attribute":
+        if (op.value != null) {
+          htmlEl.setAttribute(`data-${op.property}`, op.value);
+        } else {
+          htmlEl.removeAttribute(`data-${op.property}`);
+        }
+        break;
+      case "html-attribute":
+        if (op.value != null) {
+          htmlEl.setAttribute(op.property, op.value);
+        } else {
+          htmlEl.removeAttribute(op.property);
+        }
+        break;
+      case "text-content":
+        if (op.value != null) htmlEl.textContent = op.value;
+        break;
+    }
+  }
+
+  return wrappedFragment ? document.body.innerHTML || "" : document.toString();
+}
