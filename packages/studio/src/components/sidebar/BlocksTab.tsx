@@ -275,6 +275,7 @@ function BlockCard({
   tags,
   posterUrl,
   videoUrl,
+  onAdd,
   onPreview,
 }: {
   name: string;
@@ -326,7 +327,7 @@ function BlockCard({
       onAdd();
       setTimeout(() => setAdding(false), 1000);
     },
-    [adding],
+    [onAdd, adding],
   );
 
   const { activeCompPath, compositionDimensions } = useStudioContext();
